@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: signal-engine-backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      - ENVIRONMENT=development
+      - DEBUG=true
+      - DATABASE_URL=sqlite+aiosqlite:///./signal_engine.db
+      - KEYCLOAK_URL=http://keycloak:8080
+      - KEYCLOAK_REALM=signal-engine
+      - KEYCLOAK_CLIENT_ID=signal-engine-client
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-}
+      - OIDC_ISSUER_URL=http://keycloak:8080/realms/signal-engine
+      - OIDC_AUDIENCE=signal-engine-api
+      - DEMO_MODE=true
+      - DEMO_USER_EMAIL=demo@local
+      - DEMO_USER_ROLE=operator
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_PROVIDER=openai-compatible
+      - LLM_MODEL=gpt-4o-mini
+      - LLM_BASE_URL=${LLM_BASE_URL:-}
+      - CORS_ORIGINS=["http://localhost:5173","http://127.0.0.1:5173"]
+    volumes:
+      - ./backend/app:/app/app:ro
+      - signal-engine-uploads:/app/uploads
+      - signal-engine-db:/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    profiles:
+      - demo
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: signal-engine-frontend
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - backend
+    profiles:
+      - demo
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: signal-engine-keycloak
+    command: start-dev
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_DB=dev-file
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - signal-engine-keycloak:/opt/keycloak/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    profiles:
+      - demo
+
+volumes:
+  signal-engine-uploads:
+  signal-engine-db:
+  signal-engine-keycloak:
