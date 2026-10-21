@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "signal-engine-ryan-vo",
+  "owner": "A220man",
+  "email": "ryandtvo@gmail.com",
+  "domain": "AI/ML developer tools",
+  "summary": "Work in progress: signal-engine-ryan-vo",
+  "workflows": [
+    "Upload STEP file \u2192 detect thickness and bends \u2192 generate flat pattern with bend lines \u2192 download DXF for manufacturing",
+    "Configure K-factor and kerf \u2192 unfold bent part \u2192 validate volume conservation \u2192 inspect per-bend measurements",
+    "Integrate with SendCutSend/DFM \u2192 use unfold output for bend checks and flat pattern verification"
+  ],
+  "auth": "oidc-keycloak-saml-broker",
+  "llm_providers": [
+    "openai-compatible",
+    "anthropic",
+    "gemini",
+    "ollama"
+  ],
+  "status": "work-in-progress"
+}
