@@ -18,7 +18,7 @@ from typing import Optional
 from build123d import (
     Compound, Face, Solid, Vector, Axis, Plane, Location,
     GeomType, ShapeList, Edge, Wire
-)
+, Mode, project, offset)
 from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCP.GeomAbs import GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone
 from OCP.TopoDS import TopoDS_Face, TopoDS_Edge
@@ -30,6 +30,7 @@ from OCP.BRepExtrema import BRepExtrema_DistShapeShape
 from OCP.TopExp import TopExp_Explorer
 from OCP.TopAbs import TopAbs_FACE, TopAbs_EDGE
 
+from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
 from app.models.unfold import (
     Unfolded, BendRecord, UnfoldRequest, UnfoldResponse,
     UnfoldErrorCode, BendDirection
@@ -356,12 +357,36 @@ class UnfoldService:
         This is a simplified but functional implementation. A full implementation
         would build the flange adjacency graph and compose transformations.
         """
-        from build123d import Compound, Face, Rotation, Location, Plane, Vector
-        from build123d import flatten_face, union_faces, offset_profile
+        from build123d import Compound, Face, Rotation, Location, Plane, Vector, Mode
+        from build123d import project, offset
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+
+        def _flatten_face(face: Face, target_plane: Plane) -> Face:
+            """Project a face onto target plane."""
+            sketch = project(face, workplane=target_plane, mode=Mode.PRIVATE)
+            faces = sketch.faces()
+            if not faces:
+                raise ValueError("Projection produced no faces")
+            return faces[0]
+
+        def _union_faces(faces: list[Face]) -> Face:
+            """Boolean union of multiple faces."""
+            if not faces:
+                raise ValueError("No faces to union")
+            if len(faces) == 1:
+                return faces[0]
+            result = faces[0]
+            for f in faces[1:]:
+                fuse = BRepAlgoAPI_Fuse(result.wrapped, f.wrapped)
+                fuse.Build()
+                if not fuse.IsDone():
+                    raise RuntimeError("Boolean fuse failed")
+                result = Face(fuse.Shape())
+            return result
 
         # Root flange = largest planar face by area
         root_face = max(planar_faces, key=lambda f: f.area)
-        root_plane = Plane(root_face.center, root_face.normal)
+        root_plane = Plane(origin=root_face.center, z_dir=root_face.normal)
 
         # Collect all planar faces that are part of the sheet (not bend relief, etc.)
         sheet_faces = [f.face for f in planar_faces if f.area > thickness * thickness * 0.5]
@@ -385,8 +410,8 @@ class UnfoldService:
             face_a, face_b = adjacent_planar[0], adjacent_planar[1]
 
             # Flatten both faces to root plane
-            flat_a = flatten_face(face_a, root_plane)
-            flat_b = flatten_face(face_b, root_plane)
+            flat_a = _flatten_face(face_a, root_plane)
+            flat_b = _flatten_face(face_b, root_plane)
 
             # The bend line is the intersection of the two flattened faces' boundaries
             # Simplified: use the bend axis projected to root plane
@@ -438,7 +463,7 @@ class UnfoldService:
         # Union all flat faces
         if not flat_faces:
             # Fallback: just flatten root
-            flat_root = flatten_face(root_face.face, root_plane)
+            flat_root = _flatten_face(root_face.face, root_plane)
             profile = flat_root
         else:
             # Deduplicate faces (same geometry)
@@ -454,7 +479,7 @@ class UnfoldService:
                     seen.add(key)
                     unique_faces.append(f)
 
-            profile = union_faces(unique_faces) if len(unique_faces) > 1 else unique_faces[0]
+            profile = _union_faces(unique_faces) if len(unique_faces) > 1 else unique_faces[0]
 
         return profile, bend_lines, bend_records
 
