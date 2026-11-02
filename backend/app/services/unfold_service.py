@@ -61,15 +61,16 @@ def get_planar_face_data(face: Face) -> tuple[Vector, Vector, float]:
     """Return (center, normal, area) for a planar face."""
     surf = BRepAdaptor_Surface(face.wrapped, True)
     plane = surf.Plane()
-    location = Vector(plane.Location().X(), plane.Location().Y(), plane.Location().Z())
     normal = Vector(plane.Axis().Direction().X(),
                     plane.Axis().Direction().Y(),
                     plane.Axis().Direction().Z())
-    # Area via GProp
+    # Area and centroid via GProp
     props = GProp_GProps()
     BRepGProp.SurfaceProperties_s(face.wrapped, props)
     area = props.Mass()
-    return location, normal, area
+    centroid = props.CentreOfMass()
+    center = Vector(centroid.X(), centroid.Y(), centroid.Z())
+    return center, normal, area
 
 
 def get_cylindrical_face_data(face: Face) -> tuple[Vector, Vector, float, float, float]:
@@ -265,7 +266,8 @@ class UnfoldService:
             centroid += f.center * (f.area / total_area)
 
         # Vote on thickness: for each pair of PARALLEL faces on opposite sides of centroid
-        thickness_votes: dict[float, int] = defaultdict(int)
+        # Weight votes by minimum face area of the pair (larger faces = more reliable)
+        thickness_votes: dict[float, float] = defaultdict(float)
         face_pairs: list[tuple[PlanarFaceInfo, PlanarFaceInfo, float]] = []
 
         for i, fi in enumerate(planar_infos):
@@ -278,15 +280,17 @@ class UnfoldService:
                         dist = abs(d1 - d2)
                         if dist > 1e-4:  # Ignore degenerate
                             t = round(dist, 6)
-                            thickness_votes[t] += 1
+                            # Weight by minimum face area of the pair
+                            weight = min(fi.area, fj.area)
+                            thickness_votes[t] += weight
                             face_pairs.append((fi, fj, t))
 
         if not thickness_votes:
             return None, planar_infos
 
-        # Find winner (must be clear majority)
-        max_votes = max(thickness_votes.values())
-        winners = [t for t, v in thickness_votes.items() if v == max_votes]
+        # Find winner (must be clear majority by weight)
+        max_weight = max(thickness_votes.values())
+        winners = [t for t, w in thickness_votes.items() if abs(w - max_weight) < 1e-6]
 
         if len(winners) != 1:
             self.warnings.append(f"Multiple thickness candidates: {winners}")

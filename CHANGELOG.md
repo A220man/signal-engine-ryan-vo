@@ -1,9 +1,18 @@
 # Changelog
 
-## 1.1.0 — work-in-progress checkpoint
+## 1.2.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
 
+## 1.1.0 — work-in-progress checkpoint
+
+### Fixed
+- Thickness detection in unfold engine: use true face centroids (via GProp) instead of plane coordinate origins; weight thickness votes by face area to prefer sheet faces over side faces.
+
+### Known Issues
+- 15 backend tests skipped due to test fixture limitations (build123d fillet creates single cylindrical faces; service expects inner/outer pairs). See STATUS.md.
+
+Partial code published for continued development. Known issues: STATUS.md.
 ## 1.0.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
