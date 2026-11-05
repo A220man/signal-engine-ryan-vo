@@ -266,9 +266,11 @@ class UnfoldService:
             centroid += f.center * (f.area / total_area)
 
         # Vote on thickness: for each pair of PARALLEL faces on opposite sides of centroid
-        # Weight votes by minimum face area of the pair (larger faces = more reliable)
+        # The sheet thickness is the MINIMUM distance between parallel face pairs
+        # (larger distances correspond to feature-to-feature, not through-thickness)
         thickness_votes: dict[float, float] = defaultdict(float)
         face_pairs: list[tuple[PlanarFaceInfo, PlanarFaceInfo, float]] = []
+        min_dist = float('inf')
 
         for i, fi in enumerate(planar_infos):
             for j, fj in enumerate(planar_infos[i+1:], i+1):
@@ -279,6 +281,7 @@ class UnfoldService:
                     if d1 * d2 < 0:  # Opposite sides
                         dist = abs(d1 - d2)
                         if dist > 1e-4:  # Ignore degenerate
+                            min_dist = min(min_dist, dist)
                             t = round(dist, 6)
                             # Weight by minimum face area of the pair
                             weight = min(fi.area, fj.area)
@@ -288,15 +291,22 @@ class UnfoldService:
         if not thickness_votes:
             return None, planar_infos
 
-        # Find winner (must be clear majority by weight)
-        max_weight = max(thickness_votes.values())
-        winners = [t for t, w in thickness_votes.items() if abs(w - max_weight) < 1e-6]
+        # Prefer the minimum distance as the thickness candidate
+        # (sheet thickness is the through-thickness distance, which is minimal)
+        # Among distances close to min_dist, pick the one with highest weight
+        candidates = [(t, w) for t, w in thickness_votes.items() if abs(t - min_dist) < min_dist * 0.5]
+        if not candidates:
+            # Fallback: use minimum distance
+            thickness = min_dist
+        else:
+            # Pick highest weight among candidates near minimum
+            thickness = max(candidates, key=lambda x: x[1])[0]
 
-        if len(winners) != 1:
-            self.warnings.append(f"Multiple thickness candidates: {winners}")
-            return None, planar_infos
-
-        thickness = winners[0]
+        # Check for clear winner (within tolerance of chosen thickness)
+        winners = [t for t in thickness_votes.keys() if abs(t - thickness) < thickness * 0.05]
+        if len(winners) > 1 and len(thickness_votes) > 1:
+            # Multiple candidates close to each other - ambiguous
+            self.warnings.append(f"Multiple thickness candidates near {thickness:.3f}: {winners}")
 
         # Verify consistency: all parallel pairs on opposite sides should match this thickness
         for fi, fj, t in face_pairs:
