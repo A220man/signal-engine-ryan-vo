@@ -64,8 +64,29 @@ class TestBendDetection:
 
     def test_hem_refused(self):
         """Hem (radius < thickness) should be refused."""
-        import pytest
-        pytest.skip("Requires proper sheet metal part construction")
+        # Create an L-bracket with a small fillet radius (hem)
+        with BuildPart() as part:
+            with BuildSketch(Plane.XY):
+                Rectangle(50, 10)
+            extrude(amount=2)
+            front_face = part.faces().sort_by(Axis.Y)[-1]
+            with BuildSketch(front_face):
+                Rectangle(50, 10)
+            extrude(amount=10)
+            
+            # Fillet with radius=0.5 (less than thickness=2) - this is a hem
+            inner_edges = [
+                e for e in part.part.solid().edges()
+                if abs(e.center().Y - 5) < 0.01 and abs(e.center().Z - 2) < 0.01 and abs(e.length - 50) < 0.01
+            ]
+            if inner_edges:
+                fillet(inner_edges, radius=0.5)
+
+        solid = part.part.solid()
+        result = unfold(solid, k_factor=0.33)
+        # Should detect hem and refuse/warn
+        assert not result.success
+        assert result.error_code == UnfoldErrorCode.HEM_DETECTED or any("Hem" in w for w in (result.unfolded.warnings if result.unfolded else []))
 
     def test_curl_refused(self):
         """Curl (sweep > 180°) should be refused."""
