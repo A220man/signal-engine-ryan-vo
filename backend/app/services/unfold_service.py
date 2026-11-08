@@ -189,7 +189,15 @@ class UnfoldService:
                 )
 
             # 2. Bend detection
-            bends, cylindrical_faces = self._detect_bends(faces, thickness)
+            bends, cylindrical_faces, refusal_reason = self._detect_bends(faces, thickness)
+            if refusal_reason:
+                error_code = UnfoldErrorCode(refusal_reason)
+                return UnfoldResponse(
+                    success=False,
+                    error_code=error_code,
+                    error_message=f"Refused: {refusal_reason.replace('_', ' ').title()}",
+                    processing_time_ms=(time.perf_counter() - start_time) * 1000
+                )
             if not bends:
                 return UnfoldResponse(
                     success=False,
@@ -318,25 +326,35 @@ class UnfoldService:
     # ---- Bend detection ------------------------------------------------------
 
     def _detect_bends(self, faces: list[Face], thickness: float
-                      ) -> tuple[list[CylindricalFaceInfo], list[CylindricalFaceInfo]]:
-        """Detect bends from coaxial cylindrical face pairs with radius diff = thickness."""
+                      ) -> tuple[list[CylindricalFaceInfo], list[CylindricalFaceInfo], Optional[str]]:
+        """Detect bends from coaxial cylindrical face pairs with radius diff = thickness.
+        
+        Returns (bends, all_cylindrical_faces, refusal_reason).
+        refusal_reason is None if OK, or "HEM_DETECTED"/"CURL_DETECTED" if refused.
+        """
         cyl_infos: list[CylindricalFaceInfo] = []
+        refusal_reason: Optional[str] = None
+        
         for i, face in enumerate(faces):
             if is_cylindrical_face(face):
                 axis_pt, axis_dir, radius, u_min, u_max = get_cylindrical_face_data(face)
                 angle_sweep = abs(u_max - u_min)
                 # Refuse hems/curls: radius < thickness or sweep > 180°
                 if radius < thickness * 0.99:  # Allow small tolerance
-                    self.warnings.append(f"Hem detected: radius {radius:.3f} < thickness {thickness:.3f}")
-                    continue
+                    refusal_reason = "HEM_DETECTED"
+                    break
                 if angle_sweep > math.pi + 1e-3:  # > 180°
-                    self.warnings.append(f"Curl detected: sweep {math.degrees(angle_sweep):.1f}° > 180°")
-                    continue
+                    refusal_reason = "CURL_DETECTED"
+                    break
                 cyl_infos.append(CylindricalFaceInfo(
                     face, axis_pt, axis_dir, radius, u_min, u_max, angle_sweep, i
                 ))
             elif is_conical_face(face):
                 self.warnings.append("Conical face detected - skipping")
+
+        # If refusal detected, return early
+        if refusal_reason:
+            return [], [], refusal_reason
 
         # Pair coaxial cylinders with radius difference = thickness
         bends: list[CylindricalFaceInfo] = []  # Inner faces (smaller radius)
@@ -359,7 +377,7 @@ class UnfoldService:
                         used.add(j)
                         break
 
-        return bends, cyl_infos
+        return bends, cyl_infos, None
 
     # ---- Flange unfolding ----------------------------------------------------
 
