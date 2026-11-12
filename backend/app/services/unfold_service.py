@@ -17,8 +17,8 @@ from typing import Optional
 
 from build123d import (
     Compound, Face, Solid, Vector, Axis, Plane, Location,
-    GeomType, ShapeList, Edge, Wire
-, Mode, project, offset)
+    GeomType, ShapeList, Edge, Wire,
+    Mode, project, offset)
 from OCP.BRepAdaptor import BRepAdaptor_Surface, BRepAdaptor_Curve
 from OCP.GeomAbs import GeomAbs_Plane, GeomAbs_Cylinder, GeomAbs_Cone
 from OCP.TopoDS import TopoDS_Face, TopoDS_Edge
