@@ -344,13 +344,14 @@ class UnfoldService:
                     refusal_reason = "HEM_DETECTED"
                     break
                 if angle_sweep > math.pi + 1e-3:  # > 180°
-                    refusal_reason = "CURL_DETECTED"
+                    refusal_reason = "HEM_DETECTED"
                     break
                 cyl_infos.append(CylindricalFaceInfo(
                     face, axis_pt, axis_dir, radius, u_min, u_max, angle_sweep, i
                 ))
             elif is_conical_face(face):
-                self.warnings.append("Conical face detected - skipping")
+                refusal_reason = "CONICAL_BEND"
+                break
 
         # If refusal detected, return early
         if refusal_reason:
