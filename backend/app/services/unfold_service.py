@@ -340,7 +340,7 @@ class UnfoldService:
                 axis_pt, axis_dir, radius, u_min, u_max = get_cylindrical_face_data(face)
                 angle_sweep = abs(u_max - u_min)
                 # Refuse hems/curls: radius < thickness or sweep > 180°
-                if radius < thickness * 0.99:  # Allow small tolerance
+                if radius < thickness:  # Per acceptance criteria: r < t
                     refusal_reason = "HEM_DETECTED"
                     break
                 if angle_sweep > math.pi + 1e-3:  # > 180°
