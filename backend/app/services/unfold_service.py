@@ -318,7 +318,7 @@ class UnfoldService:
 
         # Verify consistency: all parallel pairs on opposite sides should match this thickness
         for fi, fj, t in face_pairs:
-            if abs(t - thickness) > thickness * 0.05:  # 5% tolerance
+            if thickness > 0 and abs(t - thickness) > thickness * 0.05:  # 5% tolerance
                 self.warnings.append(f"Thickness variation detected: {t:.3f} vs {thickness:.3f}")
 
         return thickness, planar_infos
